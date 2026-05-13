@@ -95,51 +95,27 @@ private:
     return p;
   }
 
-  // 檢查是否贏了 (局部掃描優化)
+  // 檢查是否贏了 (僅連六視為獲勝)
   bool is_win_at(const BitBoard &b, int pos, int color) {
     const bitset<361> &my_b = (color == 1) ? b.black : b.white;
-    const bitset<361> &opp_b = (color == 1) ? b.white : b.black;
     int r = pos / size, c = pos % size;
     int dr[] = {0, 1, 1, 1}, dc[] = {1, 0, 1, -1};
 
-    int l5 = 0, l4 = 0, d5 = 0, l3 = 0;
-    bool six = false;
-
     for (int i = 0; i < 4; ++i) {
       int count = 1;
-      int left_open = 0, right_open = 0;
       // Forward
       for (int step = 1; step < 6; ++step) {
         int nr = r + dr[i] * step, nc = c + dc[i] * step;
-        if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
-          if (my_b.test(nr * size + nc)) count++;
-          else { if (!opp_b.test(nr * size + nc)) right_open = 1; break; }
-        } else break;
+        if (nr >= 0 && nr < size && nc >= 0 && nc < size && my_b.test(nr * size + nc)) count++;
+        else break;
       }
       // Backward
       for (int step = 1; step < 6; ++step) {
         int nr = r - dr[i] * step, nc = c - dc[i] * step;
-        if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
-          if (my_b.test(nr * size + nc)) count++;
-          else { if (!opp_b.test(nr * size + nc)) left_open = 1; break; }
-        } else break;
+        if (nr >= 0 && nr < size && nc >= 0 && nc < size && my_b.test(nr * size + nc)) count++;
+        else break;
       }
-
-      if (count >= 6) six = true;
-      if (count == 5) {
-        if (left_open && right_open) l5++;
-        else if (left_open || right_open) d5++;
-      }
-      if (count == 4 && left_open && right_open) l4++;
-      if (count == 3 && left_open && right_open) l3++;
-    }
-
-    if (six || l5 > 0) return true;
-    
-    // 如果局部沒有達成組合，但有潛力，才做全局掃描
-    if (l4 > 0 || d5 > 0 || l3 > 0) {
-      Patterns p = count_patterns(b, color);
-      return (p.six > 0 || p.live_5 > 0 || p.live_4 >= 2 || (p.live_4 >= 1 && p.dead_5 >= 1) || p.live_3 >= 3);
+      if (count >= 6) return true;
     }
     return false;
   }
@@ -186,12 +162,21 @@ private:
     Patterns my_p = count_patterns(b, my_color);
     Patterns opp_p = count_patterns(b, 3 - my_color);
 
-    if (my_p.six > 0 || my_p.live_5 > 0 || my_p.live_4 >= 2 || (my_p.live_4 >= 1 && my_p.dead_5 >= 1) || my_p.live_3 >= 3)
-      return 1000000;
-    if (opp_p.six > 0 || opp_p.live_5 > 0 || opp_p.live_4 >= 2 || (opp_p.live_4 >= 1 && opp_p.dead_5 >= 1) || opp_p.live_3 >= 3)
-      return -1000000;
+    if (my_p.six > 0) return 1000000;
+    if (opp_p.six > 0) return -1000000;
 
     int score = 0;
+    // 獲勝棋型給予極高獎勵，但不直接回傳勝負，引導 AI 走完最後一手
+    if (my_p.live_5 > 0) score += 800000;
+    if (my_p.live_4 >= 2) score += 700000;
+    if (my_p.live_4 >= 1 && my_p.dead_5 >= 1) score += 600000;
+    if (my_p.live_3 >= 3) score += 500000;
+
+    if (opp_p.live_5 > 0) score -= 800000;
+    if (opp_p.live_4 >= 2) score -= 700000;
+    if (opp_p.live_4 >= 1 && opp_p.dead_5 >= 1) score -= 600000;
+    if (opp_p.live_3 >= 3) score -= 500000;
+
     score += my_p.dead_5 * 5000 + my_p.live_4 * 1000 + my_p.live_3 * 200;
     score -= (opp_p.dead_5 * 5000 + opp_p.live_4 * 1000 + opp_p.live_3 * 200);
 
