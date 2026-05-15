@@ -161,21 +161,26 @@ def handle_room_snapshot(room, username, strategy, runtime_state):
         board = decode_compact_board(room.get("board_compact"), room.get("board_size"))
 
     my_color = player_colors.get(str(my_player_id))
+    opp_color = 3 - int(my_color) if my_color is not None else None
     time_left = float(player_time_left.get(str(my_player_id), 0.0) or 0.0)
     strong_available = int(strong_by_color.get(str(my_color), 0) or 0) if my_color is not None else 0
+    opp_strong_available = int(strong_by_color.get(str(opp_color), 0) or 0) if opp_color is not None else 0
 
     turn_info = room.get("turn_info")
+    move_count = room.get("move_count") or 0
     if room.get("awaiting_move") and turn_info and turn_info.get("player_id") == my_player_id:
-        move_key = f"{room.get('current_game_id')}:{room.get('move_count')}:{my_player_id}"
+        move_key = f"{room.get('current_game_id')}:{move_count}:{my_player_id}"
         if runtime_state.get("last_move_key") == move_key:
             return True
         try:
-            print(f"My turn! Color={my_color}, Time left={time_left:.2f}s")
+            print(f"My turn! Color={my_color}, Time left={time_left:.2f}s, Move={move_count}")
             row, col, use_strong = strategy.choose_move(
                 board=board,
                 my_color=my_color,
                 strong_available=strong_available,
+                opp_strong_available=opp_strong_available,
                 time_left=time_left,
+                move_count=move_count,
             )
             print(f"Submitting move: ({row}, {col}), strong={use_strong}")
             api.make_move(ROOM_ID, row, col, use_strong)

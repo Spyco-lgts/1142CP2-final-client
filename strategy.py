@@ -11,27 +11,36 @@ class BotStrategy:
         if not os.path.exists(self.engine_path):
             print(f"[Warning] C++ Engine not found at {self.engine_path}! Please compile brain.cpp first.")
 
-    def choose_move(self, board, my_color, strong_available, time_left):
+    def choose_move(self, board, my_color, strong_available, opp_strong_available, time_left, move_count):
         """
-        board: 2D list, "."=空, "b"=黑一般, "w"=白一般, "B"=黑Strong, "W"=白Strong
-        my_color: int, 1=黑, 2=白
-        strong_available: int, 持有強子數
-        time_left: float, 剩餘時間
+        move_count: 當前是第幾手
         """
-        # 1. 轉換盤面為 Compact String
         board_size = len(board)
         compact_board = "".join(["".join(row) for row in board])
+        
+        # 判斷強子是否即將過期 (每 7 手補給一次，在 6, 13, 20... 手前)
+        # 如果當前是 5, 12, 19... 手，且手上有強子，這回合不下一回合就浪費了
+        is_expiring = 1 if (strong_available > 0 and (move_count % 7 == 5)) else 0
                 
-        # 2. 呼叫 C++ 引擎
         try:
-            # 根據剩餘時間調整搜尋深度
-            depth = "2"
-            if time_left > 60: depth = "3"
-            if time_left < 15: depth = "1"
-            
-            # 參數: <size> <compact_board> <my_color> <strong_available> <depth>
+            # 增量引擎極快，基礎深度從 8 開始
+            depth = "8"
+            # 留 2 秒作為 Python 與系統緩衝
+            search_time_ms = int(max(500, (time_left * 1000) * 0.5)) 
+            if time_left > 120: 
+                depth = "14"
+                search_time_ms = 8000 # 初始幾步多思考，建立優勢
+            elif time_left > 60: 
+                depth = "12"
+                search_time_ms = 5000
+            elif time_left < 20:
+                depth = "8"
+                search_time_ms = 1000
+
+            # 參數: <size> <compact_board> <my_color> <strong_available> <opp_strong_available> <is_expiring> <max_depth> <time_ms>
             result = subprocess.run(
-                [self.engine_path, str(board_size), compact_board, str(my_color), str(strong_available), depth],
+                [self.engine_path, str(board_size), compact_board, str(my_color), 
+                 str(strong_available), str(opp_strong_available), str(is_expiring), depth, str(search_time_ms)],
                 capture_output=True, text=True, check=True, timeout=max(1.0, time_left - 1.0)
             )
             
